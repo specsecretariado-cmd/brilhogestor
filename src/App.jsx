@@ -1,179 +1,500 @@
 import React, { useEffect, useState } from "react";
+import Login from "./Login";
+import { users as initialUsers } from "./users";
+import UserManagement from "./UserManagement";
 
 /*
   BrilhoGestor - Inventory & Sales Manager for jewelry stores
   Single-file React component (main app)
 */
 
-export default function App(){
-  const [products, setProducts] = useState(()=>{ try{ return JSON.parse(localStorage.getItem("bg_products"))||[] }catch{ return [] }});
-  const [transactions, setTransactions] = useState(()=>{ try{ return JSON.parse(localStorage.getItem("bg_transactions"))||[] }catch{ return [] }});
-  const [clients, setClients] = useState(()=>{ try{ return JSON.parse(localStorage.getItem("bg_clients"))||[] }catch{ return [] }});
+export default function App() {
+  const [products, setProducts] = useState(() => { try { return JSON.parse(localStorage.getItem("bg_products")) || [] } catch { return [] } });
+  const [transactions, setTransactions] = useState(() => { try { return JSON.parse(localStorage.getItem("bg_transactions")) || [] } catch { return [] } });
+  const [clients, setClients] = useState(() => { try { return JSON.parse(localStorage.getItem("bg_clients")) || [] } catch { return [] } });
+  const [users, setUsers] = useState(() => { try { return JSON.parse(localStorage.getItem("bg_users")) || initialUsers } catch { return initialUsers } });
 
-  useEffect(()=>{ localStorage.setItem("bg_products", JSON.stringify(products)) },[products]);
-  useEffect(()=>{ localStorage.setItem("bg_transactions", JSON.stringify(transactions)) },[transactions]);
-  useEffect(()=>{ localStorage.setItem("bg_clients", JSON.stringify(clients)) },[clients]);
+  useEffect(() => { localStorage.setItem("bg_products", JSON.stringify(products)) }, [products]);
+  useEffect(() => { localStorage.setItem("bg_transactions", JSON.stringify(transactions)) }, [transactions]);
+  useEffect(() => { localStorage.setItem("bg_clients", JSON.stringify(clients)) }, [clients]);
+  useEffect(() => { localStorage.setItem("bg_users", JSON.stringify(users)) }, [users]);
 
-  const [tab,setTab] = useState("dashboard");
+  const [tab, setTab] = useState("dashboard");
 
   // product form
-  const [pName,setPName]=useState(""); const [pSKU,setPSKU]=useState(""); const [pCost,setPCost]=useState(0); const [pPrice,setPPrice]=useState(0); const [pStock,setPStock]=useState(0);
-  function addProduct(e){ e.preventDefault(); if(!pName) return alert("Informe o nome do produto."); const id=Date.now(); setProducts(s=>[...s,{id,name:pName,sku:pSKU,cost:Number(pCost),price:Number(pPrice),stock:Number(pStock)}]); setPName(""); setPSKU(""); setPCost(0); setPPrice(0); setPStock(0); setTab("products"); }
+  const [pName, setPName] = useState("");
+  const [pSKU, setPSKU] = useState("");
+  const [pCost, setPCost] = useState(0);
+  const [pPrice, setPPrice] = useState(0);
+  const [pStock, setPStock] = useState(0);
+  const [editingProduct, setEditingProduct] = useState(null);
 
-  // clients
-  const [cName,setCName]=useState(""); const [cCPF,setCCPF]=useState("");
-  function addClient(e){ e.preventDefault(); if(!cName||!cCPF) return alert("Nome e CPF obrigatórios."); const cpfClean=cCPF.replace(/\D/g,""); setClients(s=>[...s,{id:Date.now(),name:cName,cpf:cpfClean}]); setCName(""); setCCPF(""); setTab("clients"); }
+  function addProduct(e) {
+    e.preventDefault();
+    if (!pName) return alert("Informe o nome do produto.");
+    if (editingProduct) {
+      setProducts(s => s.map(p => p.id === editingProduct.id ? { ...p, name: pName, sku: pSKU, cost: Number(pCost), price: Number(pPrice), stock: Number(pStock) } : p));
+      setEditingProduct(null);
+    } else {
+      const id = Date.now();
+      setProducts(s => [...s, { id, name: pName, sku: pSKU, cost: Number(pCost), price: Number(pPrice), stock: Number(pStock) }]);
+    }
+    setPName("");
+    setPSKU("");
+    setPCost(0);
+    setPPrice(0);
+    setPStock(0);
+  }
 
-  // entries
-  const [entryProductId,setEntryProductId]=useState(""); const [entryQty,setEntryQty]=useState(1); const [entryCostPerUnit,setEntryCostPerUnit]=useState(0);
-  function addStock(e){ e.preventDefault(); const prodIdx=products.findIndex(p=>p.id===Number(entryProductId)); if(prodIdx===-1) return alert("Produto não selecionado."); const updated=[...products]; const prevStock = Number(updated[prodIdx].stock); updated[prodIdx].stock = prevStock + Number(entryQty); const oldTotalCost = (updated[prodIdx].cost||0)*prevStock; const newTotalCost = Number(entryCostPerUnit)*Number(entryQty); const newAvg = (oldTotalCost+newTotalCost)/(updated[prodIdx].stock||1); updated[prodIdx].cost = Number(newAvg.toFixed(2)); setProducts(updated); const t={id:Date.now(),type:"in",productId:Number(entryProductId),qty:Number(entryQty),unitCost:Number(entryCostPerUnit),date:new Date().toISOString()}; setTransactions(s=>[t,...s]); setEntryQty(1); setEntryCostPerUnit(0); setEntryProductId(""); setTab("transactions"); }
+  function handleEditProduct(product) {
+    setEditingProduct(product);
+    setPName(product.name);
+    setPSKU(product.sku);
+    setPCost(product.cost);
+    setPPrice(product.price);
+    setPStock(product.stock);
+  }
 
-  // sales
-  const [saleProductId,setSaleProductId]=useState("");
-  const [saleSku, setSaleSku] = useState("");
-  const [saleQty,setSaleQty]=useState(1); const [salePricePerUnit,setSalePricePerUnit]=useState(0); const [salePaymentMethod,setSalePaymentMethod]=useState("Dinheiro"); const [saleClientId,setSaleClientId]=useState("");
+  function handleDeleteProduct(productId) {
+    if (window.confirm("Tem certeza que deseja excluir este produto?")) {
+      setProducts(s => s.filter(p => p.id !== productId));
+    }
+  }
 
-  // New logic: search product by SKU
+  // transaction form
+  const [tProdId, setTProdId] = useState("");
+  const [tQtd, setTQtd] = useState(1);
+  const [tPay, setTPay] = useState("dinheiro");
+  const [tDiscount, setTDiscount] = useState(0);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [tSku, setTSku] = useState("");
+
   useEffect(() => {
-    if (saleSku) {
-      const foundProduct = products.find(p => p.sku === saleSku);
+    if (tSku) {
+      const foundProduct = products.find(p => p.sku === tSku);
       if (foundProduct) {
-        setSaleProductId(foundProduct.id.toString());
-        setSalePricePerUnit(foundProduct.price);
+        setTProdId(foundProduct.id);
       } else {
-        setSaleProductId("");
-        setSalePricePerUnit(0);
+        setTProdId("");
       }
     } else {
-      setSaleProductId("");
-      setSalePricePerUnit(0);
+      setTProdId("");
     }
-  }, [saleSku, products]);
+  }, [tSku, products]);
 
-  function makeSale(e){ e.preventDefault(); const pIndex = products.findIndex(p=>p.id===Number(saleProductId)); if(pIndex===-1) return alert("Selecione um produto."); if(products[pIndex].stock < saleQty) return alert("Estoque insuficiente."); const updated=[...products]; updated[pIndex].stock = Number(updated[pIndex].stock) - Number(saleQty); setProducts(updated); const prod = products[pIndex]; const profit = (Number(salePricePerUnit) - Number(prod.cost)) * Number(saleQty); const t={id:Date.now(),type:"sale",productId:Number(saleProductId),qty:Number(saleQty),unitPrice:Number(salePricePerUnit),paymentMethod:salePaymentMethod,clientId:saleClientId?Number(saleClientId):null,profit:Number(profit.toFixed(2)),date:new Date().toISOString()}; setTransactions(s=>[t,...s]); setSaleQty(1); setSalePricePerUnit(0); setSaleProductId(""); setSaleSku(""); setSalePaymentMethod("Dinheiro"); setSaleClientId(""); setTab("transactions"); }
+  function addTransaction(e) {
+    e.preventDefault();
+    if (!tProdId) {
+      alert("Selecione um produto.");
+      return;
+    }
 
-  const totals = transactions.reduce((acc,t)=>{ if(t.type==="sale"){ acc.totalRevenue += t.unitPrice * t.qty; acc.totalProfit += Number(t.profit||0); acc.paymentBreakdown[t.paymentMethod] = (acc.paymentBreakdown[t.paymentMethod]||0) + t.unitPrice * t.qty; } return acc; },{ totalRevenue:0, totalProfit:0, paymentBreakdown:{} });
+    const product = products.find(p => p.id == tProdId);
+    if (!product) {
+        alert("Produto não encontrado.");
+        return;
+    }
+    
+    const finalPrice = product.price - Number(tDiscount);
+    if (finalPrice < 0) {
+      alert("Desconto não pode ser maior que o preço do produto.");
+      return;
+    }
 
-  function downloadJSON(filename,data){ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
-  function toCSV(arr){ if(!arr.length) return ""; const keys = Object.keys(arr[0]); const lines=[keys.join(",")]; for(const row of arr){ lines.push(keys.map(k=>`"${(row[k]??"").toString().replace(/"/g,'""')}"`).join(",")); } return lines.join("\n"); }
-  function downloadCSV(filename,arr){ const csv=toCSV(arr); const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
+    if (editingTransaction) {
+      // Logic to edit an existing transaction
+      setTransactions(transactions.map(t => t.id === editingTransaction.id ? { ...t, productId: product.id, product: product.name, quantity: Number(tQtd), price: finalPrice, payment: tPay, discount: Number(tDiscount) } : t));
+      setEditingTransaction(null);
+    } else {
+      // Logic to add a new transaction
+      if (product.stock < tQtd) {
+        alert("Estoque insuficiente.");
+        return;
+      }
+      const id = Date.now();
+      setTransactions(s => [...s, { id, productId: product.id, product: product.name, quantity: Number(tQtd), price: finalPrice, payment: tPay, discount: Number(tDiscount), date: new Date().toLocaleDateString("pt-BR") }]);
+      setProducts(s => s.map(p => p.id == tProdId ? { ...p, stock: p.stock - tQtd } : p));
+    }
+
+    setTProdId("");
+    setTSku("");
+    setTQtd(1);
+    setTDiscount(0);
+  }
+
+  function handleEditTransaction(transaction) {
+    if (!transaction) {
+        console.error("Transação inválida.");
+        return;
+    }
+    const product = products.find(p => p.id === transaction.productId);
+    if (!product) {
+      alert("Erro: O produto associado a esta transação não foi encontrado. Talvez ele tenha sido excluído.");
+      return;
+    }
+    setEditingTransaction(transaction);
+    setTProdId(product.id);
+    setTSku(product.sku);
+    setTQtd(transaction.quantity);
+    setTDiscount(transaction.discount);
+    setTPay(transaction.payment);
+  }
+
+  function handleDeleteTransaction(transactionId) {
+    if (window.confirm("Tem certeza que deseja excluir esta transação?")) {
+      const transactionToDelete = transactions.find(t => t.id === transactionId);
+      if (!transactionToDelete) {
+          console.error("Transação a ser excluída não encontrada.");
+          return;
+      }
+      const product = products.find(p => p.id === transactionToDelete.productId);
+      if (product) {
+        setProducts(s => s.map(p => p.id === product.id ? { ...p, stock: p.stock + transactionToDelete.quantity } : p));
+      }
+      setTransactions(transactions.filter(t => t.id !== transactionId));
+    }
+  }
+
+  function addStock(e) {
+    e.preventDefault();
+    if (!tProdId) return alert("Selecione um produto.");
+    const product = products.find(p => p.id == tProdId);
+    if (!product) {
+      alert("Produto não encontrado.");
+      return;
+    }
+    setProducts(s => s.map(p => p.id == tProdId ? { ...p, stock: p.stock + tQtd } : p));
+    setTProdId("");
+    setTSku("");
+    setTQtd(1);
+  }
+
+  // client form
+  const [cName, setCName] = useState("");
+  const [cCPF, setCCPF] = useState("");
+  const [editingClient, setEditingClient] = useState(null);
+  function addClient(e) {
+    e.preventDefault();
+    if (!cName) return alert("Informe o nome do cliente.");
+    if (!cCPF) return alert("Informe o CPF.");
+
+    if (editingClient) {
+      setClients(clients.map(c => c.id === editingClient.id ? { ...c, name: cName, cpf: cCPF } : c));
+      setEditingClient(null);
+    } else {
+      const id = Date.now();
+      setClients(s => [...s, { id, name: cName, cpf: cCPF }]);
+    }
+    setCName("");
+    setCCPF("");
+  }
+  function handleEditClient(client) {
+    setEditingClient(client);
+    setCName(client.name);
+    setCCPF(client.cpf);
+  }
+  function handleDeleteClient(clientId) {
+    if (window.confirm("Tem certeza que deseja excluir este cliente?")) {
+      setClients(clients.filter(c => c.id !== clientId));
+    }
+  }
+
+  // data export helpers
+  function downloadJSON(filename, data) {
+    const jsonStr = JSON.stringify(data);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+  function downloadCSV(filename, data) {
+    const csvRows = ["id;product;quantity;price;payment;date"];
+    data.forEach(t => csvRows.push(`${t.id};${t.product};${t.quantity};${t.price};${t.payment};${t.date}`));
+    const csvStr = csvRows.join("\n");
+    const blob = new Blob([csvStr], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+
+  // --- Funções de cálculo de relatório mensal ---
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
+  const [reportYear, setReportYear] = useState(new Date().getFullYear());
+
+  const filteredTransactions = transactions.filter(t => {
+    const transactionDate = new Date(t.date.split('/').reverse().join('-'));
+    return transactionDate.getMonth() + 1 === Number(reportMonth) && transactionDate.getFullYear() === Number(reportYear);
+  });
+  
+  const monthlyRevenue = filteredTransactions.reduce((sum, t) => sum + (t.price * t.quantity), 0);
+  const monthlyCost = filteredTransactions.reduce((sum, t) => sum + (products.find(p => p.id === t.productId)?.cost || 0) * t.quantity, 0);
+  const monthlyProfit = monthlyRevenue - monthlyCost;
+
+  // revenue and profit calculations
+  const totalRevenue = transactions.reduce((sum, t) => sum + (t.price * t.quantity), 0);
+  const totalCost = transactions.reduce((sum, t) => sum + (products.find(p => p.id === t.productId)?.cost || 0) * t.quantity, 0);
+  const totalProfit = totalRevenue - totalCost;
+
+  // Login
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  const handleLoginSuccess = (user) => {
+    setIsLoggedIn(true);
+    setCurrentUser(user);
+    localStorage.setItem("bg_isLoggedIn", "true");
+    localStorage.setItem("bg_currentUser", JSON.stringify(user));
+  };
+  
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setCurrentUser(null);
+    localStorage.removeItem("bg_isLoggedIn");
+    localStorage.removeItem("bg_currentUser");
+  };
+
+  useEffect(() => {
+    try {
+      const savedLoginState = localStorage.getItem("bg_isLoggedIn");
+      const savedUser = JSON.parse(localStorage.getItem("bg_currentUser"));
+      if (savedLoginState === "true" && savedUser) {
+        setIsLoggedIn(true);
+        setCurrentUser(savedUser);
+      }
+    } catch (e) {
+      console.error("Falha ao carregar o estado do usuário do localStorage.", e);
+      localStorage.removeItem("bg_isLoggedIn");
+      localStorage.removeItem("bg_currentUser");
+    }
+  }, []);
+
+  // Lista de anos para o seletor (agora incluindo 10 anos à frente)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 11 }, (_, i) => currentYear + i);
 
   return (
-    <div className="container">
-      <header className="header">
-        <div className="logo">
-          <div className="badge">BG</div>
-          <div>
-            <h1 style={{margin:0}}>BrilhoGestor</h1>
-            <div className="small">Controle de estoque, vendas e clientes</div>
-          </div>
-        </div>
-        <nav className="nav">
-          <button className={tab==="dashboard"?"active":""} onClick={()=>setTab("dashboard")}>Visão Geral</button>
-          <button className={tab==="products"?"active":""} onClick={()=>setTab("products")}>Produtos</button>
-          <button className={tab==="transactions"?"active":""} onClick={()=>setTab("transactions")}>Movimentações</button>
-          <button className={tab==="clients"?"active":""} onClick={()=>setTab("clients")}>Clientes</button>
-        </nav>
-      </header>
-
-      {tab==="dashboard" && (
-        <section>
-          <div className="grid cols-3" style={{marginBottom:16}}>
-            <div className="card"><div className="small">Receita total</div><div style={{fontSize:20,fontWeight:700}}>R$ {totals.totalRevenue.toFixed(2)}</div></div>
-            <div className="card"><div className="small">Lucro total</div><div style={{fontSize:20,fontWeight:700}}>R$ {totals.totalProfit.toFixed(2)}</div></div>
-            <div className="card"><div className="small">Produtos cadastrados</div><div style={{fontSize:20,fontWeight:700}}>{products.length}</div></div>
-          </div>
-
-          <div className="card" style={{marginBottom:12}}>
-            <h3 style={{marginTop:0}}>Resumo por forma de pagamento</h3>
-            {Object.entries(totals.paymentBreakdown).length===0 ? <div className="small">Nenhuma venda registrada ainda.</div> : Object.entries(totals.paymentBreakdown).map(([m,v])=> <div key={m}>{m}: R$ {v.toFixed(2)}</div>)}
-          </div>
-
-          <div className="controls" style={{marginTop:12}}>
-            <button className="btn" onClick={()=>setTab("products")}>Novo produto</button>
-            <button className="btn" onClick={()=>setTab("transactions")}>Registrar movimento</button>
-            <button className="btn" onClick={()=>setTab("clients")}>Novo cliente</button>
-          </div>
-        </section>
-      )}
-
-      {tab==="products" && (
-        <section>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-            <form className="card" onSubmit={addProduct}>
-              <h3 style={{marginTop:0}}>Cadastrar produto</h3>
-              <div className="form-row"><label>Nome</label><input value={pName} onChange={e=>setPName(e.target.value)} /></div>
-              <div className="form-row"><label>SKU</label><input value={pSKU} onChange={e=>setPSKU(e.target.value)} /></div>
-              <div className="form-row"><label>Custo unitário (R$)</label><input type="number" step="0.01" value={pCost} onChange={e=>setPCost(e.target.value)} /></div>
-              <div className="form-row"><label>Preço venda (R$)</label><input type="number" step="0.01" value={pPrice} onChange={e=>setPPrice(e.target.value)} /></div>
-              <div className="form-row"><label>Estoque inicial</label><input type="number" value={pStock} onChange={e=>setPStock(e.target.value)} /></div>
-              <button className="btn" type="submit">Salvar produto</button>
-            </form>
-
-            <div className="card">
-              <h3 style={{marginTop:0}}>Lista de produtos</h3>
-              <table className="table">
-                <thead><tr><th>Nome</th><th>SKU</th><th>Custo</th><th>Preço</th><th>Estoque</th></tr></thead>
-                <tbody>{products.map(p=> <tr key={p.id}><td>{p.name}</td><td>{p.sku}</td><td>R$ {Number(p.cost).toFixed(2)}</td><td>R$ {Number(p.price).toFixed(2)}</td><td>{p.stock}</td></tr>)}</tbody>
-              </table>
-              <div style={{marginTop:10}} className="controls">
-                <button className="btn" onClick={()=>downloadJSON("products.json",products)}>Exportar JSON</button>
-                <button className="btn" onClick={()=>downloadCSV("products.csv",products)}>Exportar CSV</button>
-              </div>
+    <>
+      {!isLoggedIn ? (
+        <Login onLoginSuccess={handleLoginSuccess} />
+      ) : (
+        <div className="container">
+          <header className="header">
+            <div className="logo"><span className="badge">BG</span> <h3>BrilhoGestor</h3></div>
+            <div className="nav">
+              <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>Dashboard</button>
+              <button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Produtos</button>
+              <button className={tab === "movement" ? "active" : ""} onClick={() => setTab("movement")}>Movimentação</button>
+              <button className={tab === "clients" ? "active" : ""} onClick={() => setTab("clients")}>Clientes</button>
+              {currentUser?.role === "admin" && (
+                <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>Usuários</button>
+              )}
+              <button className="btn" onClick={handleLogout}>Sair</button>
             </div>
-          </div>
+          </header>
+          {tab === "dashboard" && (
+            <section>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div className="card"><h3>Receita total</h3><p>{totalRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p></div>
+                <div className="card"><h3>Lucro total</h3><p>{totalProfit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p></div>
+              </div>
+              <div className="card" style={{ marginTop: 16 }}>
+                <h3>Relatório Mensal</h3>
+                <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
+                  <div className="form-row" style={{ flex: 1 }}><label>Mês</label><select value={reportMonth} onChange={e => setReportMonth(e.target.value)}>{Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+                  <div className="form-row" style={{ flex: 1 }}><label>Ano</label><select value={reportYear} onChange={e => setReportYear(e.target.value)}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div className="card-mini"><h4>Receita do Mês</h4><p>{monthlyRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p></div>
+                  <div className="card-mini"><h4>Lucro do Mês</h4><p>{monthlyProfit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p></div>
+                </div>
+              </div>
+              <div className="card" style={{ marginTop: 16 }}>
+                <h3>Vendas recentes</h3>
+                <table className="table"><thead><tr><th>Produto</th><th>Qtd</th><th>Preço</th><th>Data</th></tr></thead><tbody>{transactions.slice(0, 5).map(t => <tr key={t.id}><td>{t.product}</td><td>{t.quantity}</td><td>{t.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td><td>{t.date}</td></tr>)}</tbody></table>
+              </div>
+              <div className="card" style={{ marginTop: 16 }}>
+                <h3>Itens com estoque baixo</h3>
+                <table className="table"><thead><tr><th>Produto</th><th>Estoque</th></tr></thead><tbody>{products.filter(p => p.stock < 10).map(p => <tr key={p.id}><td>{p.name}</td><td>{p.stock}</td></tr>)}</tbody></table>
+              </div>
+            </section>
+          )}
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginTop:16}}>
-            <form className="card" onSubmit={addStock}>
-              <h3 style={{marginTop:0}}>Entrada de mercadoria</h3>
-              <div className="form-row"><label>Produto</label><select value={entryProductId} onChange={e=>setEntryProductId(e.target.value)}><option value="">-- selecione --</option>{products.map(p=> <option key={p.id} value={p.id}>{p.name} (Estoque: {p.stock})</option>)}</select></div>
-              <div className="form-row"><label>Quantidade</label><input type="number" value={entryQty} onChange={e=>setEntryQty(e.target.value)} /></div>
-              <div className="form-row"><label>Custo unitário (R$)</label><input type="number" step="0.01" value={entryCostPerUnit} onChange={e=>setEntryCostPerUnit(e.target.value)} /></div>
-              <button className="btn" type="submit">Registrar entrada</button>
-            </form>
+          {tab === "products" && (
+            <section>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+                <form className="card" onSubmit={addProduct}>
+                  <h3 style={{ marginTop: 0 }}>{editingProduct ? "Editar Produto" : "Cadastrar Produto"}</h3>
+                  <div className="form-row"><label>Nome</label><input value={pName} onChange={e => setPName(e.target.value)} /></div>
+                  <div className="form-row"><label>SKU</label><input value={pSKU} onChange={e => setPSKU(e.target.value)} /></div>
+                  <div className="form-row"><label>Custo</label><input type="number" value={pCost} onChange={e => setPCost(e.target.value)} /></div>
+                  <div className="form-row"><label>Preço</label><input type="number" value={pPrice} onChange={e => setPPrice(e.target.value)} /></div>
+                  <div className="form-row"><label>Estoque</label><input type="number" value={pStock} onChange={e => setPStock(e.target.value)} /></div>
+                  <button className="btn" type="submit">{editingProduct ? "Salvar Edição" : "Salvar produto"}</button>
+                  {editingProduct && (
+                    <button className="btn" type="button" onClick={() => { setEditingProduct(null); setPName(""); setPSKU(""); setPCost(0); setPPrice(0); setPStock(0); }} style={{ width: '100%', marginTop: '8px' }}>
+                      Cancelar
+                    </button>
+                  )}
+                </form>
+              </div>
+              <div className="card" style={{ marginTop: 16 }}>
+                <h3>Produtos</h3>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>SKU</th>
+                      <th>Custo</th>
+                      <th>Preço</th>
+                      <th>Estoque</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map(p => (
+                      <tr key={p.id}>
+                        <td>{p.name}</td>
+                        <td>{p.sku}</td>
+                        <td>{p.cost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                        <td>{p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                        <td>{p.stock}</td>
+                        <td>
+                          <button className="btn-sm" onClick={() => handleEditProduct(p)} style={{ marginRight: '8px' }}>Editar</button>
+                          <button className="btn-sm" onClick={() => handleDeleteProduct(p.id)} style={{ backgroundColor: 'salmon' }}>Excluir</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 8 }} className="controls"><button className="btn" onClick={() => downloadJSON("products.json", products)}>Exportar JSON</button><button className="btn" onClick={() => downloadCSV("products.csv", products)}>Exportar CSV</button></div>
+              </div>
+            </section>
+          )}
 
-            <form className="card" onSubmit={makeSale}>
-              <h3 style={{marginTop:0}}>Registrar venda</h3>
-              <div className="form-row"><label>Buscar por SKU</label><input type="text" value={saleSku} onChange={e => setSaleSku(e.target.value)} placeholder="Digite o SKU" /></div>
-              <div className="form-row"><label>Produto</label><select value={saleProductId} onChange={e=>setSaleProductId(e.target.value)}><option value="">-- selecione --</option>{products.map(p=> <option key={p.id} value={p.id}>{p.name} (Estoque: {p.stock})</option>)}</select></div>
-              <div className="form-row"><label>Quantidade</label><input type="number" value={saleQty} onChange={e=>setSaleQty(e.target.value)} /></div>
-              <div className="form-row"><label>Preço unitário (R$)</label><input type="number" step="0.01" value={salePricePerUnit} onChange={e=>setSalePricePerUnit(e.target.value)} /></div>
-              <div className="form-row"><label>Forma de pagamento</label><select value={salePaymentMethod} onChange={e=>setSalePaymentMethod(e.target.value)}><option>Dinheiro</option><option>Cartão</option><option>PIX</option><option>Boleto</option></select></div>
-              <div className="form-row"><label>Cliente (opcional)</label><select value={saleClientId} onChange={e=>setSaleClientId(e.target.value)}><option value="">-- nenhum --</option>{clients.map(c=> <option key={c.id} value={c.id}>{c.name} - {c.cpf}</option>)}</select></div>
-              <button className="btn" type="submit">Registrar venda</button>
-            </form>
-          </div>
-        </section>
+          {tab === "movement" && (
+            <section>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <form className="card" onSubmit={addTransaction}>
+                  <h3 style={{ marginTop: 0 }}>{editingTransaction ? "Editar Venda" : "Venda / Saída"}</h3>
+                  <div className="form-row"><label>Buscar por SKU</label><input type="text" value={tSku} onChange={e => setTSku(e.target.value)} placeholder="Digite o SKU" /></div>
+                  <div className="form-row"><label>Produto</label><select value={tProdId} onChange={e => setTProdId(e.target.value)}><option value="">Selecione um produto</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                  <div className="form-row"><label>Quantidade</label><input type="number" value={tQtd} onChange={e => setTQtd(e.target.value)} /></div>
+                  <div className="form-row"><label>Desconto (R$)</label><input type="number" value={tDiscount} onChange={e => setTDiscount(e.target.value)} /></div>
+                  <div className="form-row"><label>Forma de Pagamento</label><select value={tPay} onChange={e => setTPay(e.target.value)}><option value="dinheiro">Dinheiro</option><option value="cartao">Cartão</option><option value="pix">PIX</option><option value="boleto">Boleto</option></select></div>
+                  <button className="btn" type="submit">{editingTransaction ? "Salvar Edição" : "Registrar venda"}</button>
+                  {editingTransaction && (
+                    <button className="btn" type="button" onClick={() => { setEditingTransaction(null); setTProdId(""); setTSku(""); setTQtd(1); setTDiscount(0); setTPay("dinheiro"); }} style={{ width: '100%', marginTop: '8px' }}>
+                      Cancelar
+                    </button>
+                  )}
+                  <div className="note" style={{ marginTop: 16 }}>Para adicionar estoque, selecione um produto, digite a quantidade e clique no botão abaixo:</div>
+                  <button className="btn" onClick={addStock}>Adicionar estoque</button>
+                </form>
+              </div>
+              <div className="card" style={{ marginTop: 16 }}>
+                <h3>Transações</h3>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th>Quantidade</th>
+                      <th>Preço</th>
+                      <th>Desconto</th>
+                      <th>Forma de Pagamento</th>
+                      <th>Data</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map(t => (
+                      <tr key={t.id}>
+                        <td>{products.find(p => p.id === t.productId)?.name || 'Produto Excluído'}</td>
+                        <td>{t.quantity}</td>
+                        <td>{t.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                        <td>{t.discount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                        <td>{t.payment}</td>
+                        <td>{t.date}</td>
+                        <td>
+                          <button className="btn-sm" onClick={() => handleEditTransaction(t)} style={{ marginRight: '8px' }}>Editar</button>
+                          <button className="btn-sm" onClick={() => handleDeleteTransaction(t.id)} style={{ backgroundColor: 'salmon' }}>Excluir</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 8 }} className="controls">
+                  <button className="btn" onClick={() => downloadJSON("all-data.json", { products, transactions, clients })}>Exportar tudo (JSON)</button>
+                  <button className="btn" onClick={() => downloadCSV("transactions.csv", transactions)}>Exportar vendas (CSV)</button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {tab === "clients" && (
+            <section>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <form className="card" onSubmit={addClient}>
+                  <h3 style={{ marginTop: 0 }}>{editingClient ? "Editar Cliente" : "Cadastrar Cliente"}</h3>
+                  <div className="form-row"><label>Nome</label><input value={cName} onChange={e => setCName(e.target.value)} /></div>
+                  <div className="form-row"><label>CPF</label><input value={cCPF} onChange={e => setCCPF(e.target.value)} /></div>
+                  <button className="btn" type="submit">{editingClient ? "Salvar Edição" : "Salvar cliente"}</button>
+                  {editingClient && (
+                    <button className="btn" type="button" onClick={() => { setEditingClient(null); setCName(""); setCCPF(""); }} style={{ width: '100%', marginTop: '8px' }}>
+                      Cancelar
+                    </button>
+                  )}
+                </form>
+                <div className="card">
+                  <h3 style={{ marginTop: 0 }}>Lista de clientes</h3>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Nome</th>
+                        <th>CPF</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clients.map(c => (
+                        <tr key={c.id}>
+                          <td>{c.name}</td>
+                          <td>{c.cpf}</td>
+                          <td>
+                            <button className="btn-sm" onClick={() => handleEditClient(c)} style={{ marginRight: '8px' }}>Editar</button>
+                            <button className="btn-sm" onClick={() => handleDeleteClient(c.id)} style={{ backgroundColor: 'salmon' }}>Excluir</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ marginTop: 8 }} className="controls">
+                    <button className="btn" onClick={() => downloadJSON("clients.json", clients)}>Exportar JSON</button>
+                    <button className="btn" onClick={() => downloadCSV("clients.csv", clients)}>Exportar CSV</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {tab === "users" && (
+            <UserManagement
+              users={users}
+              setUsers={setUsers}
+              currentUser={currentUser}
+            />
+          )}
+
+          <footer className="footer">Feito para loja de joias — BrilhoGestor. Dados salvos localmente.</footer>
+        </div>
       )}
-
-      {tab==="transactions" && (
-        <section>
-          <div className="card">
-            <h3 style={{marginTop:0}}>Movimentações recentes</h3>
-            <table className="table">
-              <thead><tr><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Valor unit.</th><th>Forma</th><th>Cliente</th><th>Lucro</th><th>Data</th></tr></thead>
-              <tbody>{transactions.map(t=>{ const p=products.find(x=>x.id===t.productId)||{}; const c=clients.find(x=>x.id===t.clientId)||null; return (<tr key={t.id}><td>{t.type==="in"?"Entrada":"Venda"}</td><td>{p.name||"-"}</td><td>{t.qty}</td><td>{t.type==="in"?`R$ ${Number(t.unitCost).toFixed(2)}`:`R$ ${Number(t.unitPrice).toFixed(2)}`}</td><td>{t.paymentMethod||"-"}</td><td>{c?`${c.name} (${c.cpf})`:"-"}</td><td>R$ {Number(t.profit||0).toFixed(2)}</td><td>{new Date(t.date).toLocaleString()}</td></tr>) })}</tbody>
-            </table>
-            <div style={{marginTop:10}} className="controls"><button className="btn" onClick={()=>downloadJSON("transactions.json",transactions)}>Exportar JSON</button><button className="btn" onClick={()=>downloadCSV("transactions.csv",transactions)}>Exportar CSV</button></div>
-          </div>
-
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
-            <div className="card"><h3 style={{marginTop:0}}>Totais rápidos</h3><div>Receita: R$ {totals.totalRevenue.toFixed(2)}</div><div>Lucro: R$ {totals.totalProfit.toFixed(2)}</div>{Object.entries(totals.paymentBreakdown).map(([k,v])=> <div key={k}>{k}: R$ {v.toFixed(2)}</div>)}</div>
-            <div className="card"><h3 style={{marginTop:0}}>Relatórios</h3><div className="small">Baixe os dados para abrir em Excel ou enviar ao contador.</div><div style={{marginTop:8}} className="controls"><button className="btn" onClick={()=>downloadJSON("all-data.json",{products,transactions,clients})}>Exportar tudo (JSON)</button><button className="btn" onClick={()=>downloadCSV("transactions.csv",transactions)}>Exportar vendas (CSV)</button></div></div>
-          </div>
-        </section>
-      )}
-
-      {tab==="clients" && (
-        <section>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-            <form className="card" onSubmit={addClient}><h3 style={{marginTop:0}}>Cadastrar cliente</h3><div className="form-row"><label>Nome</label><input value={cName} onChange={e=>setCName(e.target.value)} /></div><div className="form-row"><label>CPF</label><input value={cCPF} onChange={e=>setCCPF(e.target.value)} /></div><button className="btn" type="submit">Salvar cliente</button></form>
-            <div className="card"><h3 style={{marginTop:0}}>Lista de clientes</h3><table className="table"><thead><tr><th>Nome</th><th>CPF</th></tr></thead><tbody>{clients.map(c=> <tr key={c.id}><td>{c.name}</td><td>{c.cpf}</td></tr>)}</tbody></table><div style={{marginTop:8}} className="controls"><button className="btn" onClick={()=>downloadJSON("clients.json",clients)}>Exportar JSON</button><button className="btn" onClick={()=>downloadCSV("clients.csv",clients)}>Exportar CSV</button></div></div>
-          </div>
-        </section>
-      )}
-
-      <footer className="footer">Feito para loja de joias — BrilhoGestor. Dados salvos localmente (localStorage). Faça backup com exportação.</footer>
-    </div>
-  )
+    </>
+  );
 }
